@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimplyChat - Register</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-form">
+            <h2>Create Account</h2>
+            <p>Register for SimplyChat</p>
+            
+            <form id="registerForm">
+                <div class="form-group">
+                    <label for="regUsername">Username</label>
+                    <input type="text" id="regUsername" name="regUsername" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="regEmail">Email</label>
+                    <input type="email" id="regEmail" name="regEmail" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="regPassword">Password</label>
+                    <input type="password" id="regPassword" name="regPassword" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="regConfirmPassword">Confirm Password</label>
+                    <input type="password" id="regConfirmPassword" name="regConfirmPassword" required>
+                </div>
+                
+                <button type="submit" class="auth-btn">Register</button>
+            </form>
+            
+            <p class="auth-switch">
+                Already have an account? <a href="login.html">Login here</a>
+            </p>
+        </div>
+    </div>
+
+    <script src="cloudService.js"></script>
+    <script src="auth.js"></script>
+</body>
+</html>
