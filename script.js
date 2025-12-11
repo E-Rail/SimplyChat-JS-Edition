@@ -4,6 +4,7 @@ let currentUser = null;
 let messages = [];
 let contacts = [];
 let currentContact = null;
+let messageSubscription = null;
 
 // DOM Elements
 const messagesDiv = document.getElementById("messages");
@@ -13,9 +14,9 @@ const currentUserSpan = document.getElementById("currentUser");
 const contactsListDiv = document.getElementById("contactsList");
 
 // Initialize the app
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // Check authentication first
-    if (!checkAuth()) {
+    if (!await checkAuth()) {
         return;
     }
     
@@ -26,19 +27,67 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Load contacts and messages
-    loadContacts();
+    await loadContacts();
     loadMessages();
     renderContacts();
+    
+    // Setup real-time messaging
+    setupRealTimeMessaging();
+    
+    // Setup add contact button
+    setupAddContactButton();
 });
 
+// Setup real-time messaging
+async function setupRealTimeMessaging() {
+    // Wait for cloud service to be available
+    await waitForSupabase();
+    
+    if (cloudServiceInstance && currentUser) {
+        // Subscribe to messages
+        messageSubscription = cloudServiceInstance.subscribeToMessages(currentUser.accountId, handleNewMessage);
+    }
+}
+
+// Handle new incoming messages
+function handleNewMessage(message) {
+    // Check if this message is for the current conversation
+    if (currentContact && 
+        ((message.sender_id === currentContact.id && message.receiver_id === currentUser.accountId) ||
+         (message.sender_id === currentUser.accountId && message.receiver_id === currentContact.id))) {
+        
+        // Add message to UI
+        const formattedMessage = {
+            text: message.content,
+            senderId: message.sender_id,
+            senderName: message.sender_id === currentUser.accountId ? currentUser.username : currentContact.name,
+            receiverId: message.receiver_id,
+            timestamp: new Date(message.created_at).getTime()
+        };
+        
+        messages.push(formattedMessage);
+        addMessageToDOM(formattedMessage, messages.length - 1);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        
+        // Update contact's last message
+        if (currentContact) {
+            currentContact.lastMessage = message.content;
+            currentContact.timestamp = new Date(message.created_at).getTime();
+            saveContacts();
+            renderContacts();
+        }
+    }
+}
+
 // Load contacts from cloud
-function loadContacts() {
-    const allUsers = getAllUsers();
+async function loadContacts() {
+    const allUsers = await getAllUsers();
     contacts = [];
     
     // Convert users to contacts format
     for (const username in allUsers) {
-        if (username !== currentUser.username) { // Don't include current user
+        // Exclude current user and any users with "ABC" in their name
+        if (username !== currentUser.username && !username.toLowerCase().includes('abc')) {
             contacts.push({
                 id: allUsers[username].accountId,
                 name: allUsers[username].username,
@@ -49,13 +98,13 @@ function loadContacts() {
         }
     }
     
-    // If no contacts, add some defaults
+    // If no contacts, add some defaults (but still exclude ABC people)
     if (contacts.length === 0) {
         contacts = [
             { id: "1", name: "Alice", email: "alice@example.com", lastMessage: "Hey there!", timestamp: Date.now() - 3600000 },
             { id: "2", name: "Bob", email: "bob@example.com", lastMessage: "See you later", timestamp: Date.now() - 7200000 },
             { id: "3", name: "Charlie", email: "charlie@example.com", lastMessage: "Thanks for the help", timestamp: Date.now() - 86400000 }
-        ];
+        ].filter(contact => !contact.name.toLowerCase().includes('abc'));
     }
     
     saveContacts();
@@ -72,9 +121,16 @@ function renderContacts() {
     contacts.forEach(contact => {
         const contactDiv = document.createElement("div");
         contactDiv.className = "contact-item";
+        
+        // Get first letter of name for avatar
+        const firstLetter = contact.name.charAt(0).toUpperCase();
+        
         contactDiv.innerHTML = `
-            <div class="contact-name"><strong>${contact.name}</strong></div>
-            <div class="contact-last-message">${contact.lastMessage}</div>
+            <div class="contact-avatar">${firstLetter}</div>
+            <div class="contact-info">
+                <div class="contact-name">${contact.name}</div>
+                <div class="contact-last-message">${contact.lastMessage}</div>
+            </div>
             <div class="contact-timestamp">${formatTime(contact.timestamp)}</div>
         `;
         contactDiv.addEventListener("click", () => selectContact(contact));
@@ -101,34 +157,50 @@ function selectContact(contact) {
     console.log("Selected contact:", contact);
 }
 
-// Load messages from localStorage (exclusive to user pairs)
-function loadMessages() {
+// Load messages from cloud (instead of localStorage)
+async function loadMessages() {
     if (!currentUser || !currentContact) {
         messages = [];
         renderMessages();
         return;
     }
     
-    // Create a unique key for this conversation
-    const conversationKey = getConversationKey(currentUser.accountId, currentContact.id);
-    const savedMessages = localStorage.getItem(conversationKey);
+    // Wait for cloud service to be available
+    await waitForSupabase();
     
-    if (savedMessages) {
-        messages = JSON.parse(savedMessages);
+    if (cloudServiceInstance) {
+        const result = await cloudServiceInstance.getMessagesBetweenUsers(currentUser.accountId, currentContact.id);
+        
+        if (result.success) {
+            messages = result.data.map(msg => ({
+                text: msg.content,
+                senderId: msg.sender_id,
+                senderName: msg.sender_id === currentUser.accountId ? currentUser.username : currentContact.name,
+                receiverId: msg.receiver_id,
+                timestamp: new Date(msg.created_at).getTime()
+            }));
+        } else {
+            messages = [];
+        }
     } else {
-        messages = [];
+        // Fallback to localStorage if cloud service is not available
+        const conversationKey = getConversationKey(currentUser.accountId, currentContact.id);
+        const savedMessages = localStorage.getItem(conversationKey);
+        
+        if (savedMessages) {
+            messages = JSON.parse(savedMessages);
+        } else {
+            messages = [];
+        }
     }
     
     renderMessages();
 }
 
-// Save messages to localStorage (exclusive to user pairs)
-function saveMessages() {
-    if (!currentUser || !currentContact) return;
-    
-    // Create a unique key for this conversation
-    const conversationKey = getConversationKey(currentUser.accountId, currentContact.id);
-    localStorage.setItem(conversationKey, JSON.stringify(messages));
+// Save messages to cloud (instead of localStorage)
+async function saveMessages() {
+    // Messages are now saved in real-time to the cloud, so we don't need this function anymore
+    // But we'll keep it for backward compatibility
 }
 
 // Generate a unique key for a conversation between two users
@@ -182,10 +254,55 @@ function formatTime(timestamp) {
 }
 
 // Send a new message
-function sendMessage() {
+async function sendMessage() {
     const text = input.value.trim();
     if (text === "" || !currentUser || !currentContact) return;
     
+    // Wait for cloud service to be available
+    await waitForSupabase();
+    
+    if (cloudServiceInstance) {
+        // Send message to cloud
+        const result = await cloudServiceInstance.sendMessage(
+            currentUser.accountId,
+            currentContact.id,
+            text
+        );
+        
+        if (result.success) {
+            // Add message to UI immediately
+            const message = {
+                text: text,
+                senderId: currentUser.accountId,
+                senderName: currentUser.username,
+                receiverId: currentContact.id,
+                timestamp: new Date().getTime()
+            };
+            
+            messages.push(message);
+            addMessageToDOM(message, messages.length - 1);
+            
+            // Update the last message for the active contact
+            currentContact.lastMessage = text;
+            currentContact.timestamp = new Date().getTime();
+            saveContacts();
+            renderContacts();
+            
+            input.value = "";
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        } else {
+            console.error("Failed to send message:", result.message);
+            // Fallback to localStorage if cloud service fails
+            fallbackSendMessage(text);
+        }
+    } else {
+        // Fallback to localStorage if cloud service is not available
+        fallbackSendMessage(text);
+    }
+}
+
+// Fallback function to send message using localStorage
+function fallbackSendMessage(text) {
     const message = {
         text: text,
         senderId: currentUser.accountId,
@@ -210,6 +327,16 @@ function sendMessage() {
 
 // Event Listeners
 sendBtn.addEventListener("click", sendMessage);
+
+// Voice button functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const voiceBtn = document.querySelector('.voice-btn');
+    if (voiceBtn) {
+        voiceBtn.addEventListener('click', function() {
+            alert('Voice message feature would be implemented here');
+        });
+    }
+});
 
 // Send on ENTER key
 input.addEventListener("keydown", (e) => {
@@ -303,4 +430,106 @@ function deleteMessage() {
         }
     }
     contextMenu.style.display = "none";
+}
+
+// Setup add contact button functionality
+function setupAddContactButton() {
+    const addContactBtn = document.getElementById('addContactBtn');
+    const addContactModal = document.getElementById('addContactModal');
+    const cancelAddContact = document.getElementById('cancelAddContact');
+    const addContactForm = document.getElementById('addContactForm');
+    
+    if (addContactBtn) {
+        addContactBtn.addEventListener('click', function() {
+            addContactModal.style.display = 'block';
+        });
+    }
+    
+    if (cancelAddContact) {
+        cancelAddContact.addEventListener('click', function() {
+            addContactModal.style.display = 'none';
+        });
+    }
+    
+    if (addContactForm) {
+        addContactForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const email = document.getElementById('contactEmail').value;
+            addNewContact(email);
+        });
+    }
+    
+    // Close modal when clicking outside
+    window.addEventListener('click', function(event) {
+        if (event.target === addContactModal) {
+            addContactModal.style.display = 'none';
+        }
+    });
+}
+
+// Add new contact functionality
+async function addNewContact(email) {
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        alert('Please enter a valid email address');
+        return;
+    }
+    
+    // Check if email exists in accounts list
+    const allUsers = await getAllUsers();
+    let foundUser = null;
+    
+    for (const username in allUsers) {
+        // Skip ABC people and current user
+        if (username.toLowerCase().includes('abc') || username === currentUser.username) {
+            continue;
+        }
+        
+        if (allUsers[username].email === email) {
+            foundUser = allUsers[username];
+            break;
+        }
+    }
+    
+    if (foundUser) {
+        // User exists, add as contact if not already added
+        const existingContact = contacts.find(contact => contact.id === foundUser.accountId);
+        if (existingContact) {
+            alert('This contact is already in your list');
+        } else {
+            // Add user as contact
+            contacts.push({
+                id: foundUser.accountId,
+                name: foundUser.username,
+                email: foundUser.email,
+                lastMessage: "No messages yet",
+                timestamp: Date.now()
+            });
+            saveContacts();
+            renderContacts();
+            alert('Contact added successfully!');
+        }
+    } else {
+        // User doesn't exist, save as local contact
+        const existingContact = contacts.find(contact => contact.email === email);
+        if (existingContact) {
+            alert('This contact is already in your list');
+        } else {
+            contacts.push({
+                id: 'local_' + Date.now(),
+                name: email.split('@')[0], // Use part before @ as name
+                email: email,
+                lastMessage: "No messages yet",
+                timestamp: Date.now()
+            });
+            saveContacts();
+            renderContacts();
+            alert('Contact saved locally!');
+        }
+    }
+    
+    // Close modal and clear form
+    document.getElementById('addContactModal').style.display = 'none';
+    document.getElementById('contactEmail').value = '';
 }
