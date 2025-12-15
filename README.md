@@ -16,7 +16,7 @@ Please access [this website](https://gitlab.com/Ethan_Song/simplychat/-/releases
 
 #### macOS
 
-1. Download the universal version of the macOS app: [SimplyChat.zip](uploads/259129605a63d512782c2d2b9fc1eb2c/SimplyChat.zip), or
+1. Download the arm version of the macOS app [here](), or
 2. Download the source code and open the src/index.html in your browser.
 
 #### Windows/Linux
