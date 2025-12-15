@@ -217,7 +217,18 @@ class CloudService {
             
             if (error) {
                 console.error('Error fetching messages:', error);
-                return { success: false, message: error.message, data: [] };
+                // Try alternative approach without joins
+                const { data: altData, error: altError } = await this.supabase
+                    .from('messages')
+                    .select('*')
+                    .or(`and(sender_id.eq.${userId1},receiver_id.eq.${userId2}),and(sender_id.eq.${userId2},receiver_id.eq.${userId1})`)
+                    .order('created_at', { ascending: true });
+                
+                if (altError) {
+                    return { success: false, message: altError.message, data: [] };
+                }
+                
+                return { success: true, data: altData };
             }
             
             return { success: true, data: data };
@@ -239,7 +250,19 @@ class CloudService {
                         event: 'INSERT',
                         schema: 'public',
                         table: 'messages',
-                        filter: `OR(sender_id.eq.${userId},receiver_id.eq.${userId})`
+                        filter: `sender_id=eq.${userId}`
+                    },
+                    (payload) => {
+                        callback(payload.new);
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `receiver_id=eq.${userId}`
                     },
                     (payload) => {
                         callback(payload.new);

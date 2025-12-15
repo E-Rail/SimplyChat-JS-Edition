@@ -1,4 +1,12 @@
--- Create users table
+-- Drop existing policies if they exist (safe to run multiple times)
+DROP POLICY IF EXISTS "Allow public read access to users" ON users;
+DROP POLICY IF EXISTS "Allow insert access to users" ON users;
+DROP POLICY IF EXISTS "Allow update access to own user" ON users;
+DROP POLICY IF EXISTS "Allow insert access to messages" ON messages;
+DROP POLICY IF EXISTS "Allow read access to messages" ON messages;
+DROP POLICY IF EXISTS "Allow read access to own messages" ON messages;
+
+-- Create users table (will not recreate if exists)
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   username TEXT UNIQUE NOT NULL,
@@ -7,12 +15,12 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Insert some sample users for testing
+-- Insert some sample users for testing (will not insert if conflicts)
 INSERT INTO users (username, email, password) VALUES 
-  ('SimplyChat Official', 'simplychatofficial@outlook.com', 'simplychat.com'),
+  ('SimplyChat Official', 'simplychatofficial@outlook.com', 'simplychat.com')
 ON CONFLICT (username) DO NOTHING;
 
--- Create messages table
+-- Create messages table (will not recreate if exists)
 CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sender_id UUID REFERENCES users(id),
@@ -21,7 +29,7 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Enable row level security
+-- Enable row level security (safe to run multiple times)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
@@ -39,12 +47,10 @@ FOR UPDATE USING (true);
 CREATE POLICY "Allow insert access to messages" ON messages
 FOR INSERT WITH CHECK (true);
 
-CREATE POLICY "Allow read access to own messages" ON messages
-FOR SELECT USING (
-  sender_id = auth.uid() OR receiver_id = auth.uid()
-);
+CREATE POLICY "Allow read access to messages" ON messages
+FOR SELECT USING (true);
 
--- Grant permissions to anon and authenticated roles
+-- Grant permissions to anon and authenticated roles (safe to run multiple times)
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON TABLE users TO anon, authenticated;
 GRANT ALL ON TABLE messages TO anon, authenticated;

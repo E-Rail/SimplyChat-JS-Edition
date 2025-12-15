@@ -1,0 +1,50 @@
+{
+  "name": "simplychat",
+  "version": "2026.0.0",
+  "description": "A simple chat application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "build": "electron-builder",
+    "pack": "electron-builder --dir"
+  },
+  "keywords": [
+    "chat",
+    "simple",
+    "messaging"
+  ],
+  "author": "SimplyChat Team",
+  "license": "MIT",
+  "build": {
+    "appId": "com.simplychat.app",
+    "productName": "SimplyChat",
+    "icon": "src/icon.ico",
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.social-networking",
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^21.0.0",
+    "electron-builder": "^23.6.0"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.1"
+  }
+}

@@ -41,6 +41,18 @@
         const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
         // Store the client in window for reuse
         window.supabaseClient = supabase;
+        
+        // Check if user is already logged in
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check localStorage for existing user session
+            const currentUser = localStorage.getItem('currentUser');
+            const currentAccount = localStorage.getItem('currentAccount');
+            
+            if (currentUser && currentAccount) {
+                // User is already logged in, redirect to main app
+                window.location.href = 'index.html';
+            }
+        });
     </script>
 
     <script src="cloudService.js"></script>

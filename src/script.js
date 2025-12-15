@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
     
     // Load contacts and messages
-    await loadContacts();
+    loadContacts(); // Changed to not be async since we're loading from localStorage
     loadMessages();
     renderContacts();
     
@@ -36,6 +36,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Setup add contact button
     setupAddContactButton();
+    
+    // Setup contact context menu
+    setupContactContextMenu();
 });
 
 // Setup real-time messaging
@@ -51,6 +54,8 @@ async function setupRealTimeMessaging() {
 
 // Handle new incoming messages
 function handleNewMessage(message) {
+    console.log('Received new message:', message);
+    
     // Check if this message is for the current conversation
     if (currentContact && 
         ((message.sender_id === currentContact.id && message.receiver_id === currentUser.accountId) ||
@@ -76,38 +81,41 @@ function handleNewMessage(message) {
             saveContacts();
             renderContacts();
         }
+    } else {
+        // Message is for a different conversation, update contacts list
+        updateContactLastMessage(message);
     }
 }
 
-// Load contacts from cloud
-async function loadContacts() {
-    const allUsers = await getAllUsers();
-    contacts = [];
+// Update contact's last message without switching conversations
+function updateContactLastMessage(message) {
+    // Find the contact who sent or received this message
+    let contactToUpdate = null;
     
-    // Convert users to contacts format
-    for (const username in allUsers) {
-        // Exclude current user and any users with "ABC" in their name
-        if (username !== currentUser.username && !username.toLowerCase().includes('abc')) {
-            contacts.push({
-                id: allUsers[username].accountId,
-                name: allUsers[username].username,
-                email: allUsers[username].email,
-                lastMessage: "No messages yet",
-                timestamp: Date.now()
-            });
-        }
+    if (message.sender_id !== currentUser.accountId) {
+        // Message was sent by someone else
+        contactToUpdate = contacts.find(contact => contact.id === message.sender_id);
+    } else {
+        // Message was sent by current user to someone else
+        contactToUpdate = contacts.find(contact => contact.id === message.receiver_id);
     }
     
-    // If no contacts, add some defaults (but still exclude ABC people)
-    if (contacts.length === 0) {
-        contacts = [
-            { id: "1", name: "Alice", email: "alice@example.com", lastMessage: "Hey there!", timestamp: Date.now() - 3600000 },
-            { id: "2", name: "Bob", email: "bob@example.com", lastMessage: "See you later", timestamp: Date.now() - 7200000 },
-            { id: "3", name: "Charlie", email: "charlie@example.com", lastMessage: "Thanks for the help", timestamp: Date.now() - 86400000 }
-        ].filter(contact => !contact.name.toLowerCase().includes('abc'));
+    if (contactToUpdate) {
+        contactToUpdate.lastMessage = message.content;
+        contactToUpdate.timestamp = new Date(message.created_at).getTime();
+        saveContacts();
+        renderContacts();
     }
-    
-    saveContacts();
+}
+
+// Load contacts from localStorage (empty by default)
+function loadContacts() {
+    const savedContacts = localStorage.getItem("contacts");
+    if (savedContacts) {
+        contacts = JSON.parse(savedContacts);
+    } else {
+        contacts = []; // Start with empty contacts list
+    }
 }
 
 // Save contacts to localStorage (contacts are local)
@@ -118,9 +126,10 @@ function saveContacts() {
 // Render contacts list
 function renderContacts() {
     contactsListDiv.innerHTML = "";
-    contacts.forEach(contact => {
+    contacts.forEach((contact, index) => {
         const contactDiv = document.createElement("div");
         contactDiv.className = "contact-item";
+        contactDiv.dataset.index = index; // Add index for context menu
         
         // Get first letter of name for avatar
         const firstLetter = contact.name.charAt(0).toUpperCase();
@@ -157,7 +166,7 @@ function selectContact(contact) {
     console.log("Selected contact:", contact);
 }
 
-// Load messages from cloud (instead of localStorage)
+// Load messages from localStorage (now all messages are stored locally)
 async function loadMessages() {
     if (!currentUser || !currentContact) {
         messages = [];
@@ -165,42 +174,25 @@ async function loadMessages() {
         return;
     }
     
-    // Wait for cloud service to be available
-    await waitForSupabase();
+    // Load messages from localStorage
+    const conversationKey = getConversationKey(currentUser.accountId, currentContact.id);
+    const savedMessages = localStorage.getItem(conversationKey);
     
-    if (cloudServiceInstance) {
-        const result = await cloudServiceInstance.getMessagesBetweenUsers(currentUser.accountId, currentContact.id);
-        
-        if (result.success) {
-            messages = result.data.map(msg => ({
-                text: msg.content,
-                senderId: msg.sender_id,
-                senderName: msg.sender_id === currentUser.accountId ? currentUser.username : currentContact.name,
-                receiverId: msg.receiver_id,
-                timestamp: new Date(msg.created_at).getTime()
-            }));
-        } else {
-            messages = [];
-        }
+    if (savedMessages) {
+        messages = JSON.parse(savedMessages);
     } else {
-        // Fallback to localStorage if cloud service is not available
-        const conversationKey = getConversationKey(currentUser.accountId, currentContact.id);
-        const savedMessages = localStorage.getItem(conversationKey);
-        
-        if (savedMessages) {
-            messages = JSON.parse(savedMessages);
-        } else {
-            messages = [];
-        }
+        messages = [];
     }
     
     renderMessages();
 }
 
-// Save messages to cloud (instead of localStorage)
-async function saveMessages() {
-    // Messages are now saved in real-time to the cloud, so we don't need this function anymore
-    // But we'll keep it for backward compatibility
+// Save messages to localStorage
+function saveMessages() {
+    if (currentUser && currentContact) {
+        const conversationKey = getConversationKey(currentUser.accountId, currentContact.id);
+        localStorage.setItem(conversationKey, JSON.stringify(messages));
+    }
 }
 
 // Generate a unique key for a conversation between two users
@@ -258,51 +250,7 @@ async function sendMessage() {
     const text = input.value.trim();
     if (text === "" || !currentUser || !currentContact) return;
     
-    // Wait for cloud service to be available
-    await waitForSupabase();
-    
-    if (cloudServiceInstance) {
-        // Send message to cloud
-        const result = await cloudServiceInstance.sendMessage(
-            currentUser.accountId,
-            currentContact.id,
-            text
-        );
-        
-        if (result.success) {
-            // Add message to UI immediately
-            const message = {
-                text: text,
-                senderId: currentUser.accountId,
-                senderName: currentUser.username,
-                receiverId: currentContact.id,
-                timestamp: new Date().getTime()
-            };
-            
-            messages.push(message);
-            addMessageToDOM(message, messages.length - 1);
-            
-            // Update the last message for the active contact
-            currentContact.lastMessage = text;
-            currentContact.timestamp = new Date().getTime();
-            saveContacts();
-            renderContacts();
-            
-            input.value = "";
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        } else {
-            console.error("Failed to send message:", result.message);
-            // Fallback to localStorage if cloud service fails
-            fallbackSendMessage(text);
-        }
-    } else {
-        // Fallback to localStorage if cloud service is not available
-        fallbackSendMessage(text);
-    }
-}
-
-// Fallback function to send message using localStorage
-function fallbackSendMessage(text) {
+    // Add message to UI immediately
     const message = {
         text: text,
         senderId: currentUser.accountId,
@@ -312,7 +260,7 @@ function fallbackSendMessage(text) {
     };
     
     messages.push(message);
-    saveMessages();
+    saveMessages(); // Save to localStorage
     addMessageToDOM(message, messages.length - 1);
     
     // Update the last message for the active contact
@@ -323,6 +271,20 @@ function fallbackSendMessage(text) {
     
     input.value = "";
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    // Attempt to send to cloud as backup (but don't depend on it)
+    try {
+        await waitForSupabase();
+        if (cloudServiceInstance) {
+            await cloudServiceInstance.sendMessage(
+                currentUser.accountId,
+                currentContact.id,
+                text
+            );
+        }
+    } catch (err) {
+        console.warn("Could not send message to cloud, but saved locally:", err);
+    }
 }
 
 // Event Listeners
@@ -343,7 +305,7 @@ input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") sendMessage();
 });
 
-// ---- Custom Right-Click Menu ----
+// ---- Custom Right-Click Menu for Messages ----
 const contextMenu = document.createElement("div");
 contextMenu.id = "contextMenu";
 
@@ -430,6 +392,71 @@ function deleteMessage() {
         }
     }
     contextMenu.style.display = "none";
+}
+
+// ---- Custom Right-Click Menu for Contacts ----
+const contactContextMenu = document.createElement("div");
+contactContextMenu.id = "contactContextMenu";
+
+const contactMenuItems = [
+    { text: "Delete Contact", action: deleteContact }
+];
+
+contactMenuItems.forEach(item => {
+    const menuItem = document.createElement("div");
+    menuItem.classList.add("context-menu-item");
+    menuItem.textContent = item.text;
+    menuItem.addEventListener("click", item.action);
+    contactContextMenu.appendChild(menuItem);
+});
+
+document.body.appendChild(contactContextMenu);
+
+let selectedContactIndex = null;
+
+function setupContactContextMenu() {
+    contactsListDiv.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        
+        // Find the contact element that was clicked
+        let contactElement = event.target;
+        while (contactElement && !contactElement.classList.contains("contact-item")) {
+            contactElement = contactElement.parentElement;
+        }
+        
+        if (contactElement) {
+            selectedContactIndex = parseInt(contactElement.dataset.index);
+            
+            contactContextMenu.style.left = event.pageX + "px";
+            contactContextMenu.style.top = event.pageY + "px";
+            contactContextMenu.style.display = "block";
+        }
+    });
+}
+
+// Hide contact context menu on click elsewhere
+document.addEventListener("click", () => {
+    contactContextMenu.style.display = "none";
+});
+
+// Contact Context Menu Action
+function deleteContact() {
+    if (selectedContactIndex !== null) {
+        if (confirm("Are you sure you want to delete this contact?")) {
+            // Remove contact from contacts array
+            contacts.splice(selectedContactIndex, 1);
+            saveContacts();
+            renderContacts();
+            
+            // If the deleted contact was the current contact, clear the chat
+            if (currentContact && selectedContactIndex === contacts.findIndex(c => c.id === currentContact.id)) {
+                currentContact = null;
+                messages = [];
+                renderMessages();
+            }
+        }
+    }
+    contactContextMenu.style.display = "none";
 }
 
 // Setup add contact button functionality

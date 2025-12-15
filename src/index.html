@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimplyChat</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Include Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.7.0/dist/umd/supabase.min.js"></script>
+    <script>
+        // Check if user is logged in before loading the page
+        if (!localStorage.getItem('currentUser') || !localStorage.getItem('currentAccount')) {
+            // Redirect to login page if not authenticated
+            window.location.href = 'login.html';
+        }
+    </script>
+</head>
+<body>
+    <div class="chat-container">
+        <!-- Contacts Sidebar -->
+        <div class="contacts-sidebar">
+            <div class="contacts-header">
+                <h2>Contacts</h2>
+            </div>
+            <div id="contactsList" class="contacts-list">
+                <!-- Contacts will be populated here -->
+            </div>
+        </div>
+        
+        <!-- Main Chat Area -->
+        <div class="chat-area">
+            <div class="chat-header">
+                <h2>SimplyChat</h2>
+                <div class="user-info">
+                    <span id="currentUser">User</span>
+                    <a href="settings.html" style="color: #333; margin-left: 10px; text-decoration: none; font-size: 18px;">⚙️</a>
+                </div>
+            </div>
+            
+            <div id="messages" class="messages"></div>
+            
+            <div class="input-area">
+                <button class="voice-btn">🎤</button>
+                <input id="messageInput" type="text" placeholder="Type a message...">
+                <button id="sendBtn">Send</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Plus Button -->
+    <button id="addContactBtn" class="floating-btn">+</button>
+    
+    <!-- Add Contact Modal -->
+    <div id="addContactModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="auth-form">
+                <h2>Add Contact</h2>
+                <p>Enter the email of the person you want to chat with</p>
+                <form id="addContactForm">
+                    <div class="form-group">
+                        <label for="contactEmail">Email Address</label>
+                        <input type="email" id="contactEmail" required>
+                    </div>
+                    <button type="submit" class="auth-btn">Add Contact</button>
+                    <button type="button" id="cancelAddContact" class="secondary-btn" style="margin-top: 10px;">Cancel</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Authentication Scripts -->
+    <script src="auth.js"></script>
+    <script src="cloudService.js"></script>
+    <script src="debug.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

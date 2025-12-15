@@ -252,7 +252,7 @@ body {
     background: #e0e0e0;
 }
 
-#contextMenu {
+#contextMenu, #contactContextMenu {
     position: absolute;
     display: none;
     background: #fff;

@@ -1,60 +1,37 @@
 // Authentication System using Supabase
 // Load Supabase client from window
-let cloudServiceInstance;
+let cloudServiceInstance = null;
 
-// Wait for DOM and Supabase to be ready
-function waitForSupabase() {
-    return new Promise((resolve) => {
+// Initialize Cloud Service
+async function initCloudService() {
+    if (cloudServiceInstance) {
+        return cloudServiceInstance;
+    }
+    
+    // Wait for Supabase to be available
+    await waitForSupabase();
+    
+    if (window.CloudService) {
+        cloudServiceInstance = new window.CloudService();
+        console.log('Cloud service initialized');
+        return cloudServiceInstance;
+    } else {
+        console.error('CloudService class not found');
+        return null;
+    }
+}
+
+// Wait for Supabase to be available
+function waitForSupabase(maxAttempts = 50) {
+    return new Promise((resolve, reject) => {
+        let attempts = 0;
         const checkSupabase = () => {
-            // Check if Supabase is available
-            if (typeof window.supabase !== 'undefined') {
-                // Check if CloudService class is available
-                if (typeof window.CloudService !== 'undefined') {
-                    if (!cloudServiceInstance) {
-                        cloudServiceInstance = new window.CloudService();
-                        console.log('CloudService instance created:', !!cloudServiceInstance);
-                    }
-                    resolve(true);
-                } else {
-                    // If CloudService class is not available, create a fallback
-                    console.log('CloudService class not found, creating fallback');
-                    cloudServiceInstance = {
-                        registerUser: async (username, email, password) => {
-                            console.log('Using fallback registerUser');
-                            return { success: false, message: 'Cloud service not available' };
-                        },
-                        loginUser: async (username, password) => {
-                            console.log('Using fallback loginUser');
-                            return { success: false, message: 'Cloud service not available' };
-                        },
-                        getAllUsers: async () => {
-                            console.log('Using fallback getAllUsers');
-                            return {};
-                        },
-                        updateUserProfile: async (accountId, userData) => {
-                            console.log('Using fallback updateUserProfile');
-                            return { success: false, message: 'Cloud service not available' };
-                        },
-                        getUserByAccountId: async (accountId) => {
-                            console.log('Using fallback getUserByAccountId');
-                            return null;
-                        },
-                        sendMessage: async (senderId, receiverId, content) => {
-                            console.log('Using fallback sendMessage');
-                            return { success: false, message: 'Cloud service not available' };
-                        },
-                        getMessagesBetweenUsers: async (userId1, userId2) => {
-                            console.log('Using fallback getMessagesBetweenUsers');
-                            return { success: false, message: 'Cloud service not available', data: [] };
-                        },
-                        subscribeToMessages: (userId, callback) => {
-                            console.log('Using fallback subscribeToMessages');
-                            return null;
-                        }
-                    };
-                    resolve(true);
-                }
+            if (window.supabase) {
+                resolve();
+            } else if (attempts >= maxAttempts) {
+                reject(new Error('Supabase failed to load'));
             } else {
+                attempts++;
                 setTimeout(checkSupabase, 100);
             }
         };
@@ -62,72 +39,88 @@ function waitForSupabase() {
     });
 }
 
-// Check if user is logged in
-async function checkAuth() {
-    // Wait for Supabase to be ready
-    await waitForSupabase();
-    
-    const currentUser = localStorage.getItem('currentUser');
-    const currentPath = window.location.pathname;
-    
-    // If not logged in and not on auth pages, redirect to login
-    if (!currentUser && !currentPath.includes('login.html') && !currentPath.includes('register.html')) {
-        // For index.html, we'll show the modal instead of redirecting
-        if (!currentPath.includes('index.html')) {
-            window.location.href = 'login.html';
+// Registration function
+async function register(username, email, password) {
+    try {
+        console.log('Register function called with:', username, email);
+        
+        // Initialize cloud service
+        const cloudService = await initCloudService();
+        if (!cloudService) {
+            return { success: false, message: 'Cloud service not available' };
         }
-        return false;
+        
+        // Register user
+        const result = await cloudService.registerUser(username, email, password);
+        
+        if (result.success) {
+            // Save user info to localStorage
+            const userInfo = {
+                username: result.user.username,
+                email: result.user.email,
+                accountId: result.user.id
+            };
+            localStorage.setItem('currentAccount', JSON.stringify(userInfo));
+            localStorage.setItem('currentUser', username);
+            console.log('Registration successful, user saved to localStorage');
+        }
+        
+        return result;
+    } catch (err) {
+        console.error('Registration error:', err);
+        return { success: false, message: 'Registration failed: ' + err.message };
     }
-    
-    // If logged in and on auth pages, redirect to chat
-    if (currentUser && (currentPath.includes('login.html') || currentPath.includes('register.html'))) {
-        window.location.href = 'index.html';
-        return false;
-    }
-    
-    return true;
 }
 
 // Login function
 async function login(username, password) {
-    console.log('Login function called with:', username);
-    
-    // Wait for cloud service to be available
-    await waitForSupabase();
-    
-    if (!cloudServiceInstance) {
-        console.error('Cloud service not available');
-        return { success: false, message: 'System not ready, please try again' };
-    }
-    
-    const result = await cloudServiceInstance.loginUser(username, password);
-    console.log('Login result:', result);
-    
-    if (result.success) {
-        localStorage.setItem('currentUser', username);
-        localStorage.setItem('currentAccount', JSON.stringify(result.user));
+    try {
+        console.log('Login function called with:', username);
+        
+        // Initialize cloud service
+        const cloudService = await initCloudService();
+        if (!cloudService) {
+            return { success: false, message: 'Cloud service not available' };
+        }
+        
+        // Login user
+        const result = await cloudService.loginUser(username, password);
+        
+        if (result.success) {
+            // Save user info to localStorage
+            localStorage.setItem('currentAccount', JSON.stringify(result.user));
+            localStorage.setItem('currentUser', username);
+            console.log('Login successful, user saved to localStorage');
+        }
+        
         return result;
+    } catch (err) {
+        console.error('Login error:', err);
+        return { success: false, message: 'Login failed: ' + err.message };
     }
-    
-    return result;
 }
 
-// Register function
-async function register(username, email, password) {
-    console.log('Register function called with:', username, email);
+// Check authentication status
+async function checkAuth() {
+    // Initialize cloud service
+    await initCloudService();
     
-    // Wait for cloud service to be available
-    await waitForSupabase();
+    const currentUser = localStorage.getItem('currentUser');
+    const currentAccount = localStorage.getItem('currentAccount');
     
-    if (!cloudServiceInstance) {
-        console.error('Cloud service not available');
-        return { success: false, message: 'System not ready, please try again' };
+    if (!currentUser || !currentAccount) {
+        // Redirect to login page if not authenticated
+        if (window.location.pathname.includes('index.html')) {
+            // For index.html, we'll handle this in the main script
+            return false;
+        } else if (!window.location.pathname.includes('login.html') && 
+                   !window.location.pathname.includes('register.html')) {
+            window.location.href = 'login.html';
+            return false;
+        }
     }
     
-    const result = await cloudServiceInstance.registerUser(username, email, password);
-    console.log('Registration result:', result);
-    
-    return result;
+    return true;
 }
 
 // Logout function
@@ -146,9 +139,9 @@ function logout() {
         }
     }
     
-    // If on index.html, show login modal
+    // If on index.html, redirect to login
     if (window.location.pathname.includes('index.html')) {
-        document.getElementById('loginModal').style.display = 'block';
+        window.location.href = 'login.html';
     } else {
         window.location.href = 'login.html';
     }
@@ -161,31 +154,30 @@ function getCurrentUser() {
     return JSON.parse(userStr);
 }
 
+// Get all users
+async function getAllUsers() {
+    // Initialize cloud service
+    const cloudService = await initCloudService();
+    if (!cloudService) {
+        console.error('Cloud service not available');
+        return {};
+    }
+    
+    return await cloudService.getAllUsers();
+}
+
 // Update user profile
 async function updateUserProfile(userData) {
     const currentUser = getCurrentUser();
     if (!currentUser) return { success: false, message: 'Not logged in' };
     
-    // Wait for cloud service to be available
-    await waitForSupabase();
-    
-    if (!cloudServiceInstance) {
+    // Initialize cloud service
+    const cloudService = await initCloudService();
+    if (!cloudService) {
         return { success: false, message: 'System not ready, please try again' };
     }
     
-    return await cloudServiceInstance.updateUserProfile(currentUser.accountId, userData);
-}
-
-// Get all users for contacts
-async function getAllUsers() {
-    // Wait for cloud service to be available
-    await waitForSupabase();
-    
-    if (!cloudServiceInstance) {
-        return {};
-    }
-    
-    return await cloudServiceInstance.getAllUsers();
+    return await cloudService.updateUserProfile(currentUser.accountId, userData);
 }
 
 // Handle login form submission for standalone login page
