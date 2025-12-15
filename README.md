@@ -1,50 +1,24 @@
 # SimplyChat
 
-A very simple chat application.
+## Introduction
 
-## Features
+Welcome to SimplyChat!
 
-- Authentication with login and registration
-- Real-time messaging between devices
-- Minimalist UI
+This is a very simple chatting application developed by The Simple Company!
 
-## Installation
-- macOS: Download Release or.
+## Release History
 
-## Running the Application
+Please access [this website](https://gitlab.com/Ethan_Song/simplychat/-/wikis/SimplyChat-Release-History) to know about the release history.
 
-### Development Mode
-```
-npm start
-```
-or
-```
-./run.sh
-```
+## Downloads
 
-### Building the Application
-```
-npm run build
-```
-or
-```
-./build.sh
-```
+### SimplyChat Node.js Version
 
-## Usage
+#### macOS
 
-1. Register a new account or login with existing credentials
-2. Add contacts using the "+" button in the bottom right
-3. Select a contact to start chatting
-4. Right-click on contacts to delete them
+1. Download the universal version of the macOS app: [SimplyChat.zip](uploads/259129605a63d512782c2d2b9fc1eb2c/SimplyChat.zip), or
+2. Download the source code and open the src/index.html in your browser.
 
-## Technical Details
+#### Windows/Linux
 
-- Built with vanilla JavaScript, HTML, and CSS
-- Uses Supabase for cloud account storage and real-time messaging
-- All chat messages are stored locally in the browser
-- Responsive design that works on various screen sizes
-
-## Icon
-
-The application uses `icon.svg` as its icon for packaging.
+Please download the source code and open the src/index.html in your browser.
