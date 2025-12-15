@@ -8,7 +8,7 @@ This is a very simple chatting application developed by The Simple Company!
 
 ## Release History
 
-Please access [this website](https://gitlab.com/Ethan_Song/simplychat/-/wikis/SimplyChat-Release-History) to know about the release history.
+Please access [this website](https://gitlab.com/Ethan_Song/simplychat/-/releases) to know about the release history.
 
 ## Downloads
 
