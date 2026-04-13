@@ -39,6 +39,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Setup contact context menu
     setupContactContextMenu();
+    
+    // Setup voice button
+    const voiceBtn = document.querySelector('.voice-btn');
+    if (voiceBtn) {
+        voiceBtn.addEventListener('click', function() {
+            alert('Voice message feature would be implemented here');
+        });
+    }
 });
 
 // Setup real-time messaging
@@ -53,8 +61,23 @@ async function setupRealTimeMessaging() {
 }
 
 // Handle new incoming messages
-function handleNewMessage(message) {
+async function handleNewMessage(message) {
     console.log('Received new message:', message);
+    
+    // Try to decrypt if message is E2E encrypted
+    let messageContent = message.content;
+    if (message.content && message.content.startsWith('E2E:') && typeof E2E !== 'undefined') {
+        try {
+            const encryptedData = JSON.parse(message.content.substring(4));
+            const privateKey = E2E.getPrivateKey();
+            if (privateKey) {
+                messageContent = await E2E.decryptMessage(encryptedData, privateKey);
+            }
+        } catch (decErr) {
+            console.warn('Failed to decrypt message:', decErr);
+            messageContent = '[Encrypted message]';
+        }
+    }
     
     // Check if this message is for the current conversation
     if (currentContact && 
@@ -63,7 +86,7 @@ function handleNewMessage(message) {
         
         // Add message to UI
         const formattedMessage = {
-            text: message.content,
+            text: messageContent,
             senderId: message.sender_id,
             senderName: message.sender_id === currentUser.accountId ? currentUser.username : currentContact.name,
             receiverId: message.receiver_id,
@@ -76,19 +99,20 @@ function handleNewMessage(message) {
         
         // Update contact's last message
         if (currentContact) {
-            currentContact.lastMessage = message.content;
+            currentContact.lastMessage = messageContent;
             currentContact.timestamp = new Date(message.created_at).getTime();
             saveContacts();
             renderContacts();
         }
     } else {
         // Message is for a different conversation, update contacts list
-        updateContactLastMessage(message);
+        updateContactLastMessage(message, messageContent);
     }
 }
 
 // Update contact's last message without switching conversations
-function updateContactLastMessage(message) {
+function updateContactLastMessage(message, decryptedContent) {
+    const content = decryptedContent || message.content;
     // Find the contact who sent or received this message
     let contactToUpdate = null;
     
@@ -101,7 +125,7 @@ function updateContactLastMessage(message) {
     }
     
     if (contactToUpdate) {
-        contactToUpdate.lastMessage = message.content;
+        contactToUpdate.lastMessage = content;
         contactToUpdate.timestamp = new Date(message.created_at).getTime();
         saveContacts();
         renderContacts();
@@ -142,13 +166,13 @@ function renderContacts() {
             </div>
             <div class="contact-timestamp">${formatTime(contact.timestamp)}</div>
         `;
-        contactDiv.addEventListener("click", () => selectContact(contact));
+        contactDiv.addEventListener("click", (event) => selectContact(contact, event));
         contactsListDiv.appendChild(contactDiv);
     });
 }
 
 // Select a contact to chat with
-function selectContact(contact) {
+function selectContact(contact, event) {
     // Remove active class from all contacts
     document.querySelectorAll('.contact-item').forEach(item => {
         item.classList.remove('active');
@@ -250,7 +274,7 @@ async function sendMessage() {
     const text = input.value.trim();
     if (text === "" || !currentUser || !currentContact) return;
     
-    // Add message to UI immediately
+    // Add message to UI immediately (show plaintext to sender)
     const message = {
         text: text,
         senderId: currentUser.accountId,
@@ -260,7 +284,7 @@ async function sendMessage() {
     };
     
     messages.push(message);
-    saveMessages(); // Save to localStorage
+    saveMessages(); // Save to localStorage (plaintext for local display)
     addMessageToDOM(message, messages.length - 1);
     
     // Update the last message for the active contact
@@ -272,14 +296,28 @@ async function sendMessage() {
     input.value = "";
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
     
-    // Attempt to send to cloud as backup (but don't depend on it)
+    // Attempt to send to cloud as encrypted backup
     try {
         await waitForSupabase();
         if (cloudServiceInstance) {
+            // Try to encrypt the message for the recipient
+            let contentToSend = text;
+            try {
+                if (typeof E2E !== 'undefined') {
+                    const recipientPublicKey = await E2E.getContactPublicKey(currentContact.id, cloudServiceInstance);
+                    if (recipientPublicKey) {
+                        const encrypted = await E2E.encryptMessage(text, recipientPublicKey);
+                        contentToSend = 'E2E:' + JSON.stringify(encrypted);
+                    }
+                }
+            } catch (encErr) {
+                console.warn('Encryption failed, sending plaintext:', encErr);
+            }
+            
             await cloudServiceInstance.sendMessage(
                 currentUser.accountId,
                 currentContact.id,
-                text
+                contentToSend
             );
         }
     } catch (err) {
@@ -289,16 +327,6 @@ async function sendMessage() {
 
 // Event Listeners
 sendBtn.addEventListener("click", sendMessage);
-
-// Voice button functionality
-document.addEventListener('DOMContentLoaded', function() {
-    const voiceBtn = document.querySelector('.voice-btn');
-    if (voiceBtn) {
-        voiceBtn.addEventListener('click', function() {
-            alert('Voice message feature would be implemented here');
-        });
-    }
-});
 
 // Send on ENTER key
 input.addEventListener("keydown", (e) => {
@@ -349,6 +377,7 @@ messagesDiv.addEventListener("contextmenu", (event) => {
 // Hide on click elsewhere
 document.addEventListener("click", () => {
     contextMenu.style.display = "none";
+    contactContextMenu.style.display = "none";
 });
 
 // Context Menu Actions
@@ -433,11 +462,6 @@ function setupContactContextMenu() {
         }
     });
 }
-
-// Hide contact context menu on click elsewhere
-document.addEventListener("click", () => {
-    contactContextMenu.style.display = "none";
-});
 
 // Contact Context Menu Action
 function deleteContact() {

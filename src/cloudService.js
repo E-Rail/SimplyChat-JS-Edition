@@ -1,16 +1,14 @@
 // Supabase Service Integration
 class CloudService {
     constructor() {
-        // Check if Supabase client is already initialized in window
-        if (window.supabaseClient) {
+        // Initialize Supabase client via config
+        if (typeof initSupabase === 'function') {
+            this.supabase = initSupabase();
+        } else if (window.supabaseClient) {
             this.supabase = window.supabaseClient;
         } else {
-            // Initialize Supabase client if not already done
-            const supabaseUrl = 'https://xcshpvtjlegnyovbzjfe.supabase.co';
-            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhjc2hwdnRqbGVnbnlvdmJ6amZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0MTYxNjEsImV4cCI6MjA4MDk5MjE2MX0.nWvHwrzGxsClh_LTht1KHO9chLaRbaQWo92jXDCH30A';
-            this.supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-            // Store the client in window for reuse
-            window.supabaseClient = this.supabase;
+            console.error('Supabase not available. Ensure config.js and supabase CDN are loaded.');
+            this.supabase = null;
         }
         console.log('CloudService initialized with supabase client:', !!this.supabase);
     }
@@ -276,8 +274,69 @@ class CloudService {
             return null;
         }
     }
+    
+    // Store user's public key for E2E encryption
+    async storePublicKey(userId, publicKeyBase64) {
+        try {
+            // Check if key already exists
+            const { data: existing } = await this.supabase
+                .from('public_keys')
+                .select('id')
+                .eq('user_id', userId)
+                .single();
+            
+            if (existing) {
+                // Update existing key
+                const { error } = await this.supabase
+                    .from('public_keys')
+                    .update({ public_key: publicKeyBase64 })
+                    .eq('user_id', userId);
+                
+                if (error) {
+                    console.error('Error updating public key:', error);
+                    return false;
+                }
+            } else {
+                // Insert new key
+                const { error } = await this.supabase
+                    .from('public_keys')
+                    .insert([{ user_id: userId, public_key: publicKeyBase64 }]);
+                
+                if (error) {
+                    console.error('Error storing public key:', error);
+                    return false;
+                }
+            }
+            
+            console.log('Public key stored successfully');
+            return true;
+        } catch (err) {
+            console.error('Error in storePublicKey:', err);
+            return false;
+        }
+    }
+    
+    // Get a user's public key for E2E encryption
+    async getPublicKey(userId) {
+        try {
+            const { data, error } = await this.supabase
+                .from('public_keys')
+                .select('public_key')
+                .eq('user_id', userId)
+                .single();
+            
+            if (error || !data) {
+                console.log('No public key found for user:', userId);
+                return null;
+            }
+            
+            return data.public_key;
+        } catch (err) {
+            console.error('Error getting public key:', err);
+            return null;
+        }
+    }
 }
 
 // Create a global instance
 window.CloudService = CloudService;
-const cloudService = new CloudService();

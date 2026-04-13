@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <!-- Include Supabase CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.7.0/dist/umd/supabase.min.js"></script>
+    <script src="config.js"></script>
     <script>
         // Check if user is logged in before loading the page
         if (!localStorage.getItem('currentUser') || !localStorage.getItem('currentAccount')) {
@@ -69,9 +70,9 @@
     </div>
     
     <!-- Authentication Scripts -->
+    <script src="crypto.js"></script>
     <script src="auth.js"></script>
     <script src="cloudService.js"></script>
-    <script src="debug.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

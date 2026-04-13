@@ -47,15 +47,13 @@
 
     <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
     <script>
-        // Initialize Supabase with your project credentials
-        const supabaseUrl = 'https://xcshpvtjlegnyovbzjfe.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhjc2hwdnRqbGVnbnlvdmJ6amZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0MTYxNjEsImV4cCI6MjA4MDk5MjE2MX0.nWvHwrzGxsClh_LTht1KHO9chLaRbaQWo92jXDCH30A';
-        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-        // Store the client in window for reuse
-        window.supabaseClient = supabase;
+        // Initialize Supabase
+        initSupabase();
     </script>
 
+    <script src="crypto.js"></script>
     <script src="cloudService.js"></script>
     <script src="auth.js"></script>
 </body>

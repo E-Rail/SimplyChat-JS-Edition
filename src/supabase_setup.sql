@@ -54,3 +54,28 @@ FOR SELECT USING (true);
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON TABLE users TO anon, authenticated;
 GRANT ALL ON TABLE messages TO anon, authenticated;
+
+-- Create public_keys table for E2E encryption
+DROP POLICY IF EXISTS "Allow read access to public keys" ON public_keys;
+DROP POLICY IF EXISTS "Allow insert access to public keys" ON public_keys;
+DROP POLICY IF EXISTS "Allow update access to public keys" ON public_keys;
+
+CREATE TABLE IF NOT EXISTS public_keys (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) UNIQUE NOT NULL,
+  public_key TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public_keys ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow read access to public keys" ON public_keys
+FOR SELECT USING (true);
+
+CREATE POLICY "Allow insert access to public keys" ON public_keys
+FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow update access to public keys" ON public_keys
+FOR UPDATE USING (true);
+
+GRANT ALL ON TABLE public_keys TO anon, authenticated;

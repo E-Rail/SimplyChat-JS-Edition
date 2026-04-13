@@ -63,6 +63,12 @@ async function register(username, email, password) {
             localStorage.setItem('currentAccount', JSON.stringify(userInfo));
             localStorage.setItem('currentUser', username);
             console.log('Registration successful, user saved to localStorage');
+            
+            // Generate E2E encryption keys for new user
+            const cloudService = await initCloudService();
+            if (typeof E2E !== 'undefined' && cloudService) {
+                await E2E.initializeKeys(userInfo.accountId, cloudService);
+            }
         }
         
         return result;
@@ -91,6 +97,12 @@ async function login(username, password) {
             localStorage.setItem('currentAccount', JSON.stringify(result.user));
             localStorage.setItem('currentUser', username);
             console.log('Login successful, user saved to localStorage');
+            
+            // Ensure E2E encryption keys exist
+            const cloudService = await initCloudService();
+            if (typeof E2E !== 'undefined' && cloudService) {
+                await E2E.initializeKeys(result.user.accountId, cloudService);
+            }
         }
         
         return result;
@@ -130,14 +142,21 @@ function logout() {
     // Clear chat data for privacy
     localStorage.removeItem('contacts');
     
+    // Clear E2E encryption keys
+    if (typeof E2E !== 'undefined') {
+        E2E.clearKeys();
+    }
+    
     // Clear conversation data but keep user accounts in cloudDB
-    // Get all keys and remove only conversation keys
+    // Collect keys first to avoid index shifting during removal
+    const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith('conversation_')) {
-            localStorage.removeItem(key);
+            keysToRemove.push(key);
         }
     }
+    keysToRemove.forEach(key => localStorage.removeItem(key));
     
     // If on index.html, redirect to login
     if (window.location.pathname.includes('index.html')) {
