@@ -1,26 +1,18 @@
--- Drop existing policies if they exist (safe to run multiple times)
-DROP POLICY IF EXISTS "Allow public read access to users" ON users;
-DROP POLICY IF EXISTS "Allow insert access to users" ON users;
-DROP POLICY IF EXISTS "Allow update access to own user" ON users;
-DROP POLICY IF EXISTS "Allow insert access to messages" ON messages;
-DROP POLICY IF EXISTS "Allow read access to messages" ON messages;
-DROP POLICY IF EXISTS "Allow read access to own messages" ON messages;
+-- ============================================
+-- SimplyChat Database Setup
+-- Run this entire script in your Supabase SQL Editor
+-- ============================================
 
--- Create users table (will not recreate if exists)
+-- 1. Users table (profiles - auth handled by Supabase Auth)
 CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY, -- matches auth.users.id
   username TEXT UNIQUE NOT NULL,
   email TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL,
+  password TEXT DEFAULT 'managed_by_supabase_auth',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Insert some sample users for testing (will not insert if conflicts)
-INSERT INTO users (username, email, password) VALUES 
-  ('SimplyChat Official', 'simplychatofficial@outlook.com', 'simplychat.com')
-ON CONFLICT (username) DO NOTHING;
-
--- Create messages table (will not recreate if exists)
+-- 2. Messages table
 CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sender_id UUID REFERENCES users(id),
@@ -29,11 +21,24 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Enable row level security (safe to run multiple times)
+-- 3. Public keys table (for E2E encryption)
+CREATE TABLE IF NOT EXISTS public_keys (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) UNIQUE NOT NULL,
+  public_key TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ============================================
+-- Enable Row Level Security
+-- ============================================
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public_keys ENABLE ROW LEVEL SECURITY;
 
--- Create policies for users table
+-- ============================================
+-- Users policies
+-- ============================================
 CREATE POLICY "Allow public read access to users" ON users
 FOR SELECT USING (true);
 
@@ -43,32 +48,18 @@ FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow update access to own user" ON users
 FOR UPDATE USING (true);
 
--- Create policies for messages table
+-- ============================================
+-- Messages policies
+-- ============================================
 CREATE POLICY "Allow insert access to messages" ON messages
 FOR INSERT WITH CHECK (true);
 
 CREATE POLICY "Allow read access to messages" ON messages
 FOR SELECT USING (true);
 
--- Grant permissions to anon and authenticated roles (safe to run multiple times)
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
-GRANT ALL ON TABLE users TO anon, authenticated;
-GRANT ALL ON TABLE messages TO anon, authenticated;
-
--- Create public_keys table for E2E encryption
-DROP POLICY IF EXISTS "Allow read access to public keys" ON public_keys;
-DROP POLICY IF EXISTS "Allow insert access to public keys" ON public_keys;
-DROP POLICY IF EXISTS "Allow update access to public keys" ON public_keys;
-
-CREATE TABLE IF NOT EXISTS public_keys (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) UNIQUE NOT NULL,
-  public_key TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-ALTER TABLE public_keys ENABLE ROW LEVEL SECURITY;
-
+-- ============================================
+-- Public keys policies
+-- ============================================
 CREATE POLICY "Allow read access to public keys" ON public_keys
 FOR SELECT USING (true);
 
@@ -78,4 +69,10 @@ FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow update access to public keys" ON public_keys
 FOR UPDATE USING (true);
 
+-- ============================================
+-- Grant permissions
+-- ============================================
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON TABLE users TO anon, authenticated;
+GRANT ALL ON TABLE messages TO anon, authenticated;
 GRANT ALL ON TABLE public_keys TO anon, authenticated;
