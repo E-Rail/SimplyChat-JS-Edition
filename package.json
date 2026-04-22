@@ -19,24 +19,24 @@
   "build": {
     "appId": "com.simplychat.app",
     "productName": "SimplyChat",
-    "icon": "src/icon.ico",
     "directories": {
       "output": "dist"
     },
     "mac": {
       "category": "public.app-category.social-networking",
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": ["universal"]
+        }
       ]
     },
     "win": {
       "target": [
-        "nsis"
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage"
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
       ]
     }
   },
