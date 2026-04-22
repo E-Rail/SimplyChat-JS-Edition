@@ -51,18 +51,41 @@ document.addEventListener('DOMContentLoaded', async function() {
 
 // Setup real-time messaging
 async function setupRealTimeMessaging() {
-    // Wait for cloud service to be available
     await waitForSupabase();
     
     if (cloudServiceInstance && currentUser) {
-        // Subscribe to messages
+        // Subscribe to real-time messages
         messageSubscription = cloudServiceInstance.subscribeToMessages(currentUser.accountId, handleNewMessage);
+        
+        // Poll for messages every 5 seconds as backup
+        startMessagePolling();
     }
+}
+
+// Polling: fetch messages from server every 5 seconds
+function startMessagePolling() {
+    setInterval(async () => {
+        if (!cloudServiceInstance || !currentUser) return;
+        
+        try {
+            const serverMessages = await cloudServiceInstance.getMessagesForUser(currentUser.accountId);
+            
+            for (const msg of serverMessages) {
+                // handleNewMessage will process and delete from server
+                await handleNewMessage(msg);
+            }
+        } catch (err) {
+            console.warn('Polling error:', err);
+        }
+    }, 5000);
 }
 
 // Handle new incoming messages
 async function handleNewMessage(message) {
     console.log('Received new message:', message);
+    
+    // Only process messages meant for us
+    if (message.receiver_id !== currentUser.accountId) return;
     
     // Try to decrypt if message is E2E encrypted
     let messageContent = message.content;
@@ -79,56 +102,57 @@ async function handleNewMessage(message) {
         }
     }
     
+    // Get sender name from contacts
+    const senderContact = contacts.find(c => c.id === message.sender_id);
+    const senderName = senderContact ? senderContact.name : 'Unknown';
+    
+    // Check if this message already exists (avoid duplicates)
+    const existingMsg = messages.find(m => 
+        m.text === messageContent && 
+        m.senderId === message.sender_id && 
+        Math.abs(m.timestamp - new Date(message.created_at).getTime()) < 5000
+    );
+    if (existingMsg) return;
+    
+    // Create formatted message with unique ID
+    const formattedMessage = {
+        id: message.id || crypto.randomUUID(),
+        text: messageContent,
+        senderId: message.sender_id,
+        senderName: message.sender_id === currentUser.accountId ? currentUser.username : senderName,
+        receiverId: message.receiver_id,
+        timestamp: new Date(message.created_at).getTime()
+    };
+    
     // Check if this message is for the current conversation
     if (currentContact && 
         ((message.sender_id === currentContact.id && message.receiver_id === currentUser.accountId) ||
          (message.sender_id === currentUser.accountId && message.receiver_id === currentContact.id))) {
         
-        // Add message to UI
-        const formattedMessage = {
-            text: messageContent,
-            senderId: message.sender_id,
-            senderName: message.sender_id === currentUser.accountId ? currentUser.username : currentContact.name,
-            receiverId: message.receiver_id,
-            timestamp: new Date(message.created_at).getTime()
-        };
-        
         messages.push(formattedMessage);
-        addMessageToDOM(formattedMessage, messages.length - 1);
+        saveMessages();
+        addMessageToDOM(formattedMessage);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
         
         // Update contact's last message
-        if (currentContact) {
-            currentContact.lastMessage = messageContent;
-            currentContact.timestamp = new Date(message.created_at).getTime();
+        currentContact.lastMessage = messageContent;
+        currentContact.timestamp = formattedMessage.timestamp;
+        saveContacts();
+        renderContacts();
+    } else {
+        // Message is for a different conversation
+        const contactToUpdate = contacts.find(c => c.id === message.sender_id);
+        if (contactToUpdate) {
+            contactToUpdate.lastMessage = messageContent;
+            contactToUpdate.timestamp = formattedMessage.timestamp;
             saveContacts();
             renderContacts();
         }
-    } else {
-        // Message is for a different conversation, update contacts list
-        updateContactLastMessage(message, messageContent);
-    }
-}
-
-// Update contact's last message without switching conversations
-function updateContactLastMessage(message, decryptedContent) {
-    const content = decryptedContent || message.content;
-    // Find the contact who sent or received this message
-    let contactToUpdate = null;
-    
-    if (message.sender_id !== currentUser.accountId) {
-        // Message was sent by someone else
-        contactToUpdate = contacts.find(contact => contact.id === message.sender_id);
-    } else {
-        // Message was sent by current user to someone else
-        contactToUpdate = contacts.find(contact => contact.id === message.receiver_id);
     }
     
-    if (contactToUpdate) {
-        contactToUpdate.lastMessage = content;
-        contactToUpdate.timestamp = new Date(message.created_at).getTime();
-        saveContacts();
-        renderContacts();
+    // Delete message from Supabase after receiving (keep DB minimal)
+    if (cloudServiceInstance && message.id) {
+        cloudServiceInstance.deleteMessage(message.id);
     }
 }
 
@@ -229,18 +253,18 @@ function getConversationKey(user1Id, user2Id) {
 // Render all messages
 function renderMessages() {
     messagesDiv.innerHTML = "";
-    messages.forEach((msg, index) => {
-        addMessageToDOM(msg, index);
+    messages.forEach((msg) => {
+        addMessageToDOM(msg);
     });
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
 // Add a message to the DOM
-function addMessageToDOM(msg, index) {
+function addMessageToDOM(msg) {
     const messageDiv = document.createElement("div");
     messageDiv.classList.add("message");
     messageDiv.classList.add(msg.senderId === currentUser.accountId ? "sent" : "received");
-    messageDiv.dataset.index = index;
+    messageDiv.dataset.id = msg.id;
     
     const messageHeader = document.createElement("div");
     messageHeader.classList.add("message-header");
@@ -274,8 +298,9 @@ async function sendMessage() {
     const text = input.value.trim();
     if (text === "" || !currentUser || !currentContact) return;
     
-    // Add message to UI immediately (show plaintext to sender)
+    // Add message to UI immediately with unique ID
     const message = {
+        id: crypto.randomUUID(),
         text: text,
         senderId: currentUser.accountId,
         senderName: currentUser.username,
@@ -284,8 +309,8 @@ async function sendMessage() {
     };
     
     messages.push(message);
-    saveMessages(); // Save to localStorage (plaintext for local display)
-    addMessageToDOM(message, messages.length - 1);
+    saveMessages();
+    addMessageToDOM(message);
     
     // Update the last message for the active contact
     currentContact.lastMessage = text;
@@ -354,19 +379,18 @@ menuItems.forEach(item => {
 
 document.body.appendChild(contextMenu);
 
-let selectedMessageIndex = null;
+let selectedMessageId = null;
 
 messagesDiv.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     
-    // Find the message element (bubble) that was clicked
     let messageElement = event.target;
     while (messageElement && !messageElement.classList.contains("message")) {
         messageElement = messageElement.parentElement;
     }
     
     if (messageElement) {
-        selectedMessageIndex = parseInt(messageElement.dataset.index);
+        selectedMessageId = messageElement.dataset.id;
         
         contextMenu.style.left = event.pageX + "px";
         contextMenu.style.top = event.pageY + "px";
@@ -382,42 +406,50 @@ document.addEventListener("click", () => {
 
 // Context Menu Actions
 function copyMessage() {
-    if (selectedMessageIndex !== null) {
-        const message = messages[selectedMessageIndex];
-        navigator.clipboard.writeText(message.text).then(() => {
-            console.log("Message copied to clipboard");
-        }).catch(err => {
-            console.error("Failed to copy message: ", err);
-        });
+    if (selectedMessageId !== null) {
+        const message = messages.find(m => m.id === selectedMessageId);
+        if (message) {
+            navigator.clipboard.writeText(message.text).then(() => {
+                console.log("Message copied to clipboard");
+            }).catch(err => {
+                console.error("Failed to copy message: ", err);
+            });
+        }
     }
     contextMenu.style.display = "none";
 }
 
 function forwardMessage() {
-    if (selectedMessageIndex !== null) {
-        const message = messages[selectedMessageIndex];
-        // In a real app, this would open a forwarding interface
-        console.log("Forwarding message:", message.text);
-        alert(`Forwarding message: "${message.text}"`);
+    if (selectedMessageId !== null) {
+        const message = messages.find(m => m.id === selectedMessageId);
+        if (message) {
+            console.log("Forwarding message:", message.text);
+            alert(`Forwarding message: "${message.text}"`);
+        }
     }
     contextMenu.style.display = "none";
 }
 
 function quoteMessage() {
-    if (selectedMessageIndex !== null) {
-        const message = messages[selectedMessageIndex];
-        input.value = `"${message.text}" `;
-        input.focus();
+    if (selectedMessageId !== null) {
+        const message = messages.find(m => m.id === selectedMessageId);
+        if (message) {
+            input.value = `"${message.text}" `;
+            input.focus();
+        }
     }
     contextMenu.style.display = "none";
 }
 
 function deleteMessage() {
-    if (selectedMessageIndex !== null) {
+    if (selectedMessageId !== null) {
         if (confirm("Are you sure you want to delete this message?")) {
-            messages.splice(selectedMessageIndex, 1);
-            saveMessages();
-            renderMessages();
+            const index = messages.findIndex(m => m.id === selectedMessageId);
+            if (index !== -1) {
+                messages.splice(index, 1);
+                saveMessages();
+                renderMessages();
+            }
         }
     }
     contextMenu.style.display = "none";

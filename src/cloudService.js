@@ -200,6 +200,43 @@ class CloudService {
         }
     }
     
+    // Delete a message from Supabase (after receiver has it)
+    async deleteMessage(messageId) {
+        try {
+            const { error } = await this.supabase
+                .from('messages')
+                .delete()
+                .eq('id', messageId);
+            
+            if (error) {
+                console.error('Error deleting message:', error);
+            }
+        } catch (err) {
+            console.error('Error deleting message:', err);
+        }
+    }
+    
+    // Get all pending messages for a user (for polling fallback)
+    async getMessagesForUser(userId) {
+        try {
+            const { data, error } = await this.supabase
+                .from('messages')
+                .select('*')
+                .eq('receiver_id', userId)
+                .order('created_at', { ascending: true });
+            
+            if (error) {
+                console.error('Error fetching messages:', error);
+                return [];
+            }
+            
+            return data || [];
+        } catch (err) {
+            console.error('Error fetching messages:', err);
+            return [];
+        }
+    }
+    
     // Get messages between two users
     async getMessagesBetweenUsers(userId1, userId2) {
         try {

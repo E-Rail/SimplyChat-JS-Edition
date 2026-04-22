@@ -1,17 +1,40 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 
-// Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
   app.quit();
 }
 
+// Register custom protocol for OAuth redirects
+if (process.defaultApp) {
+  // In development, need to re-register with the exec path
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('simplychat', process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient('simplychat');
+}
+
+let mainWindow;
+
+function sendOAuthUrl(url) {
+  if (mainWindow) {
+    mainWindow.webContents.send('oauth-callback', url);
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+}
+
+// Handle protocol URL (macOS open-url event)
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  sendOAuthUrl(url);
+});
+
 const createWindow = () => {
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: path.join(__dirname, 'src/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -19,35 +42,37 @@ const createWindow = () => {
     }
   });
 
-  // Load the login.html of the app by default
-  // The login page will redirect to index.html if user is already authenticated
   mainWindow.loadFile(path.join(__dirname, 'src/login.html'));
 
-  // Open the DevTools for debugging.
+  // Open DevTools for debugging (uncomment if needed)
   // mainWindow.webContents.openDevTools();
 };
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on('ready', () => {
+  createWindow();
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
+  // Handle protocol URL passed as arg (app not running when link clicked)
+  const protocolUrl = process.argv.find(arg => arg.startsWith('simplychat://'));
+  if (protocolUrl) {
+    setTimeout(() => sendOAuthUrl(protocolUrl), 1000);
   }
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('activate', () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and import them here.
+// IPC: open external URL (for OAuth)
+ipcMain.handle('open-external', async (event, url) => {
+  await shell.openExternal(url);
+});
+
+// IPC: check for protocol URL on Windows/Linux
+ipcMain.handle('get-protocol-url', () => {
+  const url = process.argv.find(arg => arg.startsWith('simplychat://'));
+  return url || null;
+});

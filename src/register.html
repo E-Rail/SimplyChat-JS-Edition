@@ -60,41 +60,62 @@
     <script src="crypto.js"></script>
     <script src="cloudService.js"></script>
     <script>
-        // Initialize Supabase
-        const supabase = initSupabase();
+        const supabaseClient = initSupabase();
+        const REDIRECT_URL = 'simplychat://auth-callback';
 
-        // Google OAuth
+        async function handleOAuthCallback(url) {
+            try {
+                const hashIdx = url.indexOf('#');
+                if (hashIdx === -1) return;
+                const params = new URLSearchParams(url.substring(hashIdx + 1));
+                const at = params.get('access_token');
+                const rt = params.get('refresh_token');
+                if (!at || !rt) return;
+
+                await supabaseClient.auth.setSession({ access_token: at, refresh_token: rt });
+                const { data: { session } } = await supabaseClient.auth.getSession();
+                if (session) {
+                    const user = session.user;
+                    const username = user.user_metadata?.username || user.user_metadata?.name || user.email.split('@')[0];
+                    const { data: ex } = await supabaseClient.from('users').select('id').eq('id', user.id).single();
+                    if (!ex) {
+                        await supabaseClient.from('users').insert([{
+                            id: user.id, username, email: user.email, password: 'managed_by_supabase_auth'
+                        }]);
+                    }
+                    localStorage.setItem('currentAccount', JSON.stringify({ username, email: user.email, accountId: user.id }));
+                    localStorage.setItem('currentUser', username);
+                    if (typeof E2E !== 'undefined') await E2E.initializeKeys(user.id, new CloudService());
+                    window.location.href = 'index.html';
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        if (window.electronAPI) {
+            window.electronAPI.onOAuthCallback(handleOAuthCallback);
+            window.electronAPI.getProtocolUrl().then(url => { if (url) handleOAuthCallback(url); });
+        }
+
         document.getElementById('googleRegBtn').addEventListener('click', async function() {
             this.disabled = true;
-            const { error } = await supabase.auth.signInWithOAuth({
+            const { data, error } = await supabaseClient.auth.signInWithOAuth({
                 provider: 'google',
-                options: {
-                    redirectTo: window.location.origin + '/auth-callback.html'
-                }
+                options: { skipBrowserRedirect: true, redirectTo: REDIRECT_URL }
             });
-            if (error) {
-                alert('Google sign up failed: ' + error.message);
-                this.disabled = false;
-            }
+            if (error) { alert('Google sign up failed: ' + error.message); this.disabled = false; }
+            else if (data?.url) window.electronAPI.openExternal(data.url);
         });
 
-        // GitHub OAuth
         document.getElementById('githubRegBtn').addEventListener('click', async function() {
             this.disabled = true;
-            const { error } = await supabase.auth.signInWithOAuth({
+            const { data, error } = await supabaseClient.auth.signInWithOAuth({
                 provider: 'github',
-                options: {
-                    redirectTo: window.location.origin + '/auth-callback.html'
-                }
+                options: { skipBrowserRedirect: true, redirectTo: REDIRECT_URL }
             });
-            if (error) {
-                alert('GitHub sign up failed: ' + error.message);
-                this.disabled = false;
-            }
+            if (error) { alert('GitHub sign up failed: ' + error.message); this.disabled = false; }
+            else if (data?.url) window.electronAPI.openExternal(data.url);
         });
-
     </script>
-
     <script src="auth.js"></script>
 </body>
 </html>

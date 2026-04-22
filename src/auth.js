@@ -35,32 +35,42 @@ async function register(username, email, password) {
         const supabase = initSupabase();
         if (!supabase) return { success: false, message: 'Service not available' };
 
-        // Check if username is taken in our users table
-        const { data: existing } = await supabase
-            .from('users')
-            .select('username')
-            .eq('username', username)
-            .single();
+        console.log('[Register] Starting registration for:', email);
 
-        if (existing) {
-            return { success: false, message: 'Username already taken' };
+        // Check if username is taken (skip if table doesn't exist)
+        try {
+            const { data: existing } = await supabase
+                .from('users')
+                .select('username')
+                .eq('username', username)
+                .single();
+
+            if (existing) {
+                return { success: false, message: 'Username already taken' };
+            }
+        } catch (e) {
+            console.log('[Register] users table check skipped:', e.message);
         }
 
-        // Sign up with Supabase Auth — this sends a verification email for free
+        // Sign up with Supabase Auth
+        console.log('[Register] Calling signUp...');
         const { data, error } = await supabase.auth.signUp({
             email: email,
             password: password,
             options: {
-                data: { username: username } // stored in user_metadata
+                data: { username: username }
             }
         });
 
+        console.log('[Register] signUp result:', { data, error });
+
         if (error) {
+            console.error('[Register] signUp error:', error);
             return { success: false, message: error.message };
         }
 
-        // Check if email confirmation is required
         if (data.user && !data.session) {
+            console.log('[Register] Email confirmation required. User ID:', data.user.id);
             return {
                 success: true,
                 needsVerification: true,
@@ -68,8 +78,8 @@ async function register(username, email, password) {
             };
         }
 
-        // If no confirmation needed (e.g. auto-confirm enabled), sync user data
         if (data.session) {
+            console.log('[Register] Auto-confirmed, syncing user...');
             await syncUserToTable(data.user, username);
             saveUserSession(data.user, username);
             return { success: true, message: 'Registration successful!' };
@@ -77,6 +87,7 @@ async function register(username, email, password) {
 
         return { success: true, needsVerification: true, message: 'Please check your email to verify your account.' };
     } catch (err) {
+        console.error('[Register] Exception:', err);
         return { success: false, message: 'Registration failed: ' + err.message };
     }
 }
@@ -315,7 +326,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await updateUserProfile(updateData);
             if (result.success) {
                 alert('Profile updated successfully');
-                window.location.reload();
+                window.location.href = 'index.html';
             } else {
                 alert(result.message);
             }
