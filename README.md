@@ -11,6 +11,18 @@ A simple, encrypted chat application built with Electron and Supabase.
 - **Contact Management** — Add and manage contacts
 - **Cross-Platform** — macOS (Universal) and Windows (x64)
 
+## Download
+
+Download the latest release from the [Releases page](https://github.com/E-Rail/SimplyChat-JS-Edition/releases/latest):
+
+- **macOS** — `SimplyChat-26.1.0-universal.dmg` (Intel & Apple Silicon)
+- **Windows** — `SimplyChat Setup 26.1.0.exe` (x64)
+
+> **macOS users:** If you get "SimplyChat is damaged", run this in Terminal after installing:
+> ```
+> xattr -cr /Applications/SimplyChat.app
+> ```
+
 ## Tech Stack
 
 - **Frontend**: HTML, CSS, JavaScript
@@ -18,54 +30,59 @@ A simple, encrypted chat application built with Electron and Supabase.
 - **Desktop**: Electron
 - **Encryption**: Web Crypto API (RSA-OAEP + AES-GCM)
 
-## Getting Started
+## Self-Deployment
 
 ### Prerequisites
 
 - Node.js (v16 or higher)
 - npm
+- A [Supabase](https://supabase.com) project
 
-### Installation
+### 1. Clone and Install
 
 ```bash
-# Clone the repository
 git clone https://github.com/E-Rail/SimplyChat-JS-Edition.git
-
-# Navigate to the project directory
 cd SimplyChat-JS-Edition
-
-# Install dependencies
 npm install
 ```
 
-### Running the App
+### 2. Set Up Database
+
+1. Go to your Supabase project → **SQL Editor**
+2. Run the contents of `src/supabase_setup.sql`
+
+### 3. Configure Supabase
+
+1. Go to **Authentication → Providers** and enable **Email**
+2. (Optional) Set up **Google** and **GitHub** OAuth providers
+3. Go to **Authentication → URL Configuration** and add `simplychat://auth-callback` to Redirect URLs
+
+### 4. Update Config
+
+Edit `src/config.js` with your Supabase credentials:
+
+```js
+const SUPABASE_URL = 'https://your-project.supabase.co';
+const SUPABASE_ANON_KEY = 'your-anon-key';
+```
+
+### 5. Run
 
 ```bash
-# Development mode
-npm run dev
-
-# Or use the start script
 npm start
 ```
 
-### Building for Production
+### 6. Build
 
 ```bash
-# Build for Mac (Universal)
+# Mac (Universal)
 npm run build:mac
 
-# Build for Windows (x64)
+# Windows (x64)
 npm run build:win
-
-# Build both
-npm run build:all
 ```
 
-Output files are saved to `dist/`.
-
-## Database Setup
-
-Run the SQL in `src/supabase_setup.sql` in your Supabase SQL editor to set up the required tables and policies.
+Output saved to `dist/`.
 
 ## Project Structure
 
@@ -92,16 +109,6 @@ SimplyChat-JS-Edition/
 │   └── supabase_setup.sql # Database schema
 └── .gitignore
 ```
-
-## macOS Note
-
-If you get "SimplyChat is damaged" error, run this in Terminal:
-
-```bash
-xattr -cr /Applications/SimplyChat.app
-```
-
-This is because the app is not code-signed with an Apple Developer certificate.
 
 ## License
 
